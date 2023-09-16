@@ -3,7 +3,7 @@ const base_models = [
   "sdxlNijiSpecial_sdxlNijiSE.safetensors",
 ];
 
-const count = 1;
+const count = 2;
 
 for (let i = 0; i < count; i++) {
   for (const modelFile of base_models) {
