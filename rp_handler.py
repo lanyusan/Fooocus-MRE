@@ -200,7 +200,7 @@ def generate_image(job):
 
     base_model_name = validated_input['validated_input'].get('base_model_name')
 
-    task = [prompt, '', ['Default (Slightly Cinematic)'], 'Speed', '1152×896 (9:7)', 2, '466835054923474620', 2, 'dpmpp_2m_sde_gpu', 'karras', 24, 0.75, 7, base_model_name, 'sd_xl_refiner_1.0_0.9vae.safetensors', -2, -2, 'sd_xl_offset_example-lora_1.0.safetensors', 0.5, 'None', 0.5, 'None', 0.5, 'None', 0.5, 'None', 0.5, False, False, False, 0.06, 0.94, 1, False, 1, 1, 1, 1, 1, 1, False, 'png', False, 0.2, 0.8, 0, 0.4, 0.8, 'control-lora-canny-rank128.safetensors', False, 0, 0.4, 0.8, 'control-lora-depth-rank128.safetensors', True, False, 1.01, 1.02, 0.99, 0.95, False, 'uov', 'Disabled', None, [], None, [], [], False]
+    task = [prompt, '', ['Default (Slightly Cinematic)'], 'Speed', '1152×896 (9:7)', 2, '466835054923474620', 1, 'dpmpp_2m_sde_gpu', 'karras', 24, 0.75, 7, base_model_name, 'sd_xl_refiner_1.0_0.9vae.safetensors', -2, -2, 'sd_xl_offset_example-lora_1.0.safetensors', 0.5, 'None', 0.5, 'None', 0.5, 'None', 0.5, 'None', 0.5, False, False, False, 0.06, 0.94, 1, False, 1, 1, 1, 1, 1, 1, False, 'png', False, 0.2, 0.8, 0, 0.4, 0.8, 'control-lora-canny-rank128.safetensors', False, 0, 0.4, 0.8, 'control-lora-depth-rank128.safetensors', True, False, 1.01, 1.02, 0.99, 0.95, False, 'uov', 'Disabled', None, [], None, [], [], False]
 
 
     worker.buffer.append(list(task))
