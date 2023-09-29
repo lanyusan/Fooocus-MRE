@@ -25,6 +25,7 @@ def load_settings():
     settings['img2img_mode'] = False
     settings['img2img_start_step'] = 0.06
     settings['img2img_denoise'] = 0.94
+    settings['img2img_scale'] = 1.0
     settings['control_lora_canny'] = False
     settings['canny_edge_low'] = 0.2
     settings['canny_edge_high'] = 0.8
@@ -64,6 +65,11 @@ def load_settings():
     settings['lora_4_weight'] = modules.path.default_lora_weight
     settings['lora_5_model'] = 'None'
     settings['lora_5_weight'] = modules.path.default_lora_weight
+    settings['freeu'] = False
+    settings['freeu_b1'] = 1.01
+    settings['freeu_b2'] = 1.02
+    settings['freeu_s1'] = 0.99
+    settings['freeu_s2'] = 0.95
 
     if exists('settings.json'):
         with open('settings.json') as settings_file:

@@ -4,11 +4,12 @@ import gc
 import torch
 import numpy as np
 import modules.path
+import modules.virtual_memory as virtual_memory
+import comfy.model_management
 
-from comfy.model_base import SDXL, SDXLRefiner
-from comfy.model_management import soft_empty_cache
+from comfy.model_base import BaseModel, SDXL, SDXLRefiner
 from modules.settings import default_settings
-from modules.patch import set_comfy_adm_encoding, set_fooocus_adm_encoding, cfg_patched
+from modules.patch import set_comfy_adm_encoding, set_fooocus_adm_encoding, cfg_patched, patched_model_function
 from modules.expansion import FooocusExpansion
 
 
@@ -31,38 +32,56 @@ controlnet_depth: core.StableDiffusionModel = None
 controlnet_depth_hash = ''
 
 
+@torch.no_grad()
+@torch.inference_mode()
 def refresh_base_model(name):
     global xl_base, xl_base_hash, xl_base_patched, xl_base_patched_hash
-    if xl_base_hash == str(name):
-        return
 
-    filename = os.path.join(modules.path.modelfile_path, name)
+    filename = os.path.abspath(os.path.realpath(os.path.join(modules.path.modelfile_path, name)))
+    model_hash = filename
+
+    if xl_base_hash == model_hash:
+        return
 
     if xl_base is not None:
         xl_base.to_meta()
         xl_base = None
 
     xl_base = core.load_model(filename)
-    if not isinstance(xl_base.unet.model, SDXL):
-        print('Model not supported. Fooocus only support SDXL model as the base model.')
+    if not isinstance(xl_base.unet.model, BaseModel):
+        print(f'Model not supported: {name}, using default base model instead.')
         xl_base = None
         xl_base_hash = ''
         refresh_base_model(modules.path.default_base_model_name)
-        xl_base_hash = name
+        xl_base_hash = model_hash
         xl_base_patched = xl_base
         xl_base_patched_hash = ''
         return
 
-    xl_base_hash = name
+    if not isinstance(xl_base.unet.model, SDXL):
+        print('WARNING: loading non-SDXL base model.')
+
+    xl_base_hash = model_hash
     xl_base_patched = xl_base
     xl_base_patched_hash = ''
-    print(f'Base model loaded: {xl_base_hash}')
+    print(f'Base model loaded: {model_hash}')
     return
 
 
+def is_base_sdxl():
+    assert xl_base is not None
+    return isinstance(xl_base.unet.model, SDXL)
+
+
+@torch.no_grad()
+@torch.inference_mode()
 def refresh_refiner_model(name):
     global xl_refiner, xl_refiner_hash
-    if xl_refiner_hash == str(name):
+
+    filename = os.path.abspath(os.path.realpath(os.path.join(modules.path.modelfile_path, name)))
+    model_hash = filename
+
+    if xl_refiner_hash == model_hash:
         return
 
     if name == 'None':
@@ -70,8 +89,6 @@ def refresh_refiner_model(name):
         xl_refiner_hash = ''
         print(f'Refiner unloaded.')
         return
-
-    filename = os.path.join(modules.path.modelfile_path, name)
 
     if xl_refiner is not None:
         xl_refiner.to_meta()
@@ -85,17 +102,19 @@ def refresh_refiner_model(name):
         print(f'Refiner unloaded.')
         return
 
-    xl_refiner_hash = name
-    print(f'Refiner model loaded: {xl_refiner_hash}')
+    xl_refiner_hash = model_hash
+    print(f'Refiner model loaded: {model_hash}')
 
     xl_refiner.vae.first_stage_model.to('meta')
     xl_refiner.vae = None
     return
 
 
-def refresh_loras(loras):
+@torch.no_grad()
+@torch.inference_mode()
+def patch_base(loras, freeu, b1, b2, s1, s2):
     global xl_base, xl_base_patched, xl_base_patched_hash
-    if xl_base_patched_hash == str(loras):
+    if xl_base_patched_hash == str(loras + [freeu, b1, b2, s1, s2]):
         return
 
     model = xl_base
@@ -103,15 +122,28 @@ def refresh_loras(loras):
         if name == 'None':
             continue
 
-        filename = os.path.join(modules.path.lorafile_path, name)
-        model = core.load_lora(model, filename, strength_model=weight, strength_clip=weight)
-    xl_base_patched = model
-    xl_base_patched_hash = str(loras)
-    print(f'LoRAs loaded: {xl_base_patched_hash}')
+        if os.path.exists(name):
+            filename = name
+        else:
+            filename = os.path.join(modules.path.lorafile_path, name)
+
+        assert os.path.exists(filename), 'Lora file not found!'
+
+        model = core.load_sd_lora(model, filename, strength_model=weight, strength_clip=weight)
+    if freeu:
+        xl_base_patched = core.freeu(model, b1, b2, s1, s2)
+    else:
+        xl_base_patched = model
+    xl_base_patched_hash = str(loras + [freeu, b1, b2, s1, s2])
+    print(f'LoRAs loaded: {loras}')
+    if freeu:
+        print(f'FreeU applied: {[b1, b2, s1, s2]}')
 
     return
 
 
+@torch.no_grad()
+@torch.inference_mode()
 def refresh_clip_vision():
     global clip_vision, clip_vision_hash
     if clip_vision_hash == str(clip_vision):
@@ -127,6 +159,8 @@ def refresh_clip_vision():
     return
 
 
+@torch.no_grad()
+@torch.inference_mode()
 def refresh_controlnet_canny(name=None):
     global controlnet_canny, controlnet_canny_hash
     if controlnet_canny_hash == str(controlnet_canny):
@@ -142,6 +176,9 @@ def refresh_controlnet_canny(name=None):
     return
 
 
+
+@torch.no_grad()
+@torch.inference_mode()
 def refresh_controlnet_depth(name=None):
     global controlnet_depth, controlnet_depth_hash
     if controlnet_depth_hash == str(controlnet_depth):
@@ -157,12 +194,8 @@ def refresh_controlnet_depth(name=None):
     return
 
 
-refresh_base_model(default_settings['base_model'])
-
-expansion = FooocusExpansion()
-
-
 @torch.no_grad()
+@torch.inference_mode()
 def set_clip_skips(base_clip_skip, refiner_clip_skip):
     xl_base_patched.clip.clip_layer(base_clip_skip)
     if xl_refiner is not None:
@@ -171,6 +204,7 @@ def set_clip_skips(base_clip_skip, refiner_clip_skip):
 
 
 @torch.no_grad()
+@torch.inference_mode()
 def apply_prompt_strength(base_cond, refiner_cond, prompt_strength=1.0):
     if prompt_strength >= 0 and prompt_strength < 1.0:
         base_cond = core.set_conditioning_strength(base_cond, prompt_strength)
@@ -184,6 +218,7 @@ def apply_prompt_strength(base_cond, refiner_cond, prompt_strength=1.0):
 
 
 @torch.no_grad()
+@torch.inference_mode()
 def apply_revision(base_cond, revision=False, revision_strengths=[], clip_vision_outputs=[]):
     if revision:
         set_comfy_adm_encoding()
@@ -196,6 +231,7 @@ def apply_revision(base_cond, revision=False, revision_strengths=[], clip_vision
 
 
 @torch.no_grad()
+@torch.inference_mode()
 def clip_encode_single(clip, text, verbose=False):
     cached = clip.fcs_cond_cache.get(text, None)
     if cached is not None:
@@ -211,6 +247,7 @@ def clip_encode_single(clip, text, verbose=False):
 
 
 @torch.no_grad()
+@torch.inference_mode()
 def clip_encode(sd, texts, pool_top_k=1):
     if sd is None:
         return None
@@ -235,6 +272,7 @@ def clip_encode(sd, texts, pool_top_k=1):
 
 
 @torch.no_grad()
+@torch.inference_mode()
 def clear_sd_cond_cache(sd):
     if sd is None:
         return None
@@ -245,36 +283,91 @@ def clear_sd_cond_cache(sd):
 
 
 @torch.no_grad()
+@torch.inference_mode()
 def clear_all_caches():
     clear_sd_cond_cache(xl_base_patched)
     clear_sd_cond_cache(xl_refiner)
+    gc.collect()
+    comfy.model_management.soft_empty_cache()
 
 
 @torch.no_grad()
-def process_diffusion(positive_cond, negative_cond, steps, switch, width, height, image_seed, sampler_name, scheduler, cfg,
-    img2img, input_image, start_step, denoise,
-    control_lora_canny, canny_edge_low, canny_edge_high, canny_start, canny_stop, canny_strength,
-    control_lora_depth, depth_start, depth_stop, depth_strength, callback):
+@torch.inference_mode()
+def refresh_everything(refiner_model_name, base_model_name, loras, freeu, b1, b2, s1, s2):
+    refresh_refiner_model(refiner_model_name)
+    if xl_refiner is not None:
+        virtual_memory.try_move_to_virtual_memory(xl_refiner.unet.model)
+        virtual_memory.try_move_to_virtual_memory(xl_refiner.clip.cond_stage_model)
 
-    if xl_base is not None:
-        xl_base.unet.model_options['sampler_cfg_function'] = cfg_patched
+    refresh_base_model(base_model_name)
+    virtual_memory.load_from_virtual_memory(xl_base.unet.model)
 
-    if xl_base_patched is not None:
-        xl_base_patched.unet.model_options['sampler_cfg_function'] = cfg_patched
+    patch_base(loras, freeu, b1, b2, s1, s2)
+    clear_all_caches()
+    return
+
+
+refresh_everything(
+    refiner_model_name=default_settings['refiner_model'],
+    base_model_name=default_settings['base_model'],
+    loras=[(default_settings['lora_1_model'], default_settings['lora_1_weight']),
+        (default_settings['lora_2_model'], default_settings['lora_2_weight']),
+        (default_settings['lora_3_model'], default_settings['lora_3_weight']),
+        (default_settings['lora_4_model'], default_settings['lora_4_weight']),
+        (default_settings['lora_5_model'], default_settings['lora_5_weight'])],
+    freeu=default_settings['freeu'],
+    b1=default_settings['freeu_b1'],
+    b2=default_settings['freeu_b2'],
+    s1=default_settings['freeu_s1'],
+    s2=default_settings['freeu_s2']
+)
+
+expansion = FooocusExpansion()
+
+
+@torch.no_grad()
+@torch.inference_mode()
+def patch_all_models():
+    assert xl_base is not None
+    assert xl_base_patched is not None
+
+    xl_base.unet.model_options['sampler_cfg_function'] = cfg_patched
+    xl_base.unet.model_options['model_function_wrapper'] = patched_model_function
+
+    xl_base_patched.unet.model_options['sampler_cfg_function'] = cfg_patched
+    xl_base_patched.unet.model_options['model_function_wrapper'] = patched_model_function
 
     if xl_refiner is not None:
         xl_refiner.unet.model_options['sampler_cfg_function'] = cfg_patched
+        xl_refiner.unet.model_options['model_function_wrapper'] = patched_model_function
 
-    positive_conditions = positive_cond[0]
-    negative_conditions = negative_cond[0]
+    return
+
+
+@torch.no_grad()
+@torch.inference_mode()
+def process_diffusion(positive_cond, negative_cond, steps, switch, width, height, image_seed, sampler_name, scheduler, cfg, img2img, input_image, start_step,
+        control_lora_canny, canny_edge_low, canny_edge_high, canny_start, canny_stop, canny_strength,
+        control_lora_depth, depth_start, depth_stop, depth_strength, callback, latent=None, denoise=1.0, tiled=False):
+
+    patch_all_models()
+
+    if xl_refiner is not None:
+        virtual_memory.try_move_to_virtual_memory(xl_refiner.unet.model)
+    virtual_memory.load_from_virtual_memory(xl_base.unet.model)
 
     if img2img and input_image != None:
         initial_latent = core.encode_vae(vae=xl_base_patched.vae, pixels=input_image)
         force_full_denoise = False
-    else:
+    elif latent is None:
         initial_latent = core.generate_empty_latent(width=width, height=height, batch_size=1)
         force_full_denoise = True
-        denoise = None
+    else:
+        initial_latent = latent
+        force_full_denoise = False
+
+    positive_conditions = positive_cond[0]
+    negative_conditions = negative_cond[0]
 
     if control_lora_canny and input_image != None:
         edges_image = core.detect_edge(input_image, canny_edge_low, canny_edge_high)
@@ -285,7 +378,7 @@ def process_diffusion(positive_cond, negative_cond, steps, switch, width, height
         positive_conditions, negative_conditions = core.apply_controlnet(positive_conditions, negative_conditions,
             controlnet_depth, input_image, depth_strength, depth_start, depth_stop)
 
-    if xl_refiner is not None:
+    if xl_refiner is not None and is_base_sdxl():
         positive_conditions_refiner = positive_cond[1]
         negative_conditions_refiner = negative_cond[1]
 
@@ -321,10 +414,7 @@ def process_diffusion(positive_cond, negative_cond, steps, switch, width, height
             callback_function=callback
         )
 
-    decoded_latent = core.decode_vae(vae=xl_base_patched.vae, latent_image=sampled_latent)
-    images = core.image_to_numpy(decoded_latent)
-
-    gc.collect()
-    soft_empty_cache()
+    decoded_latent = core.decode_vae(vae=xl_base_patched.vae, latent_image=sampled_latent, tiled=tiled)
+    images = core.pytorch_to_numpy(decoded_latent)
 
     return images

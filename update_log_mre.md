@@ -1,6 +1,64 @@
+### 2.0.78.4 MRE
+
+* Added Load Last Prompt button (contribution from sngazm).
+* Fixed hangup in Upscale (Fast 2x).
+* Fixed problems with turning off FreeU in some scenarios.
+* Fixed loading prompts from JPG files processed by external apps.
+* Fixed fast upscale always saving as PNG.
+
+### 2.0.78.3 MRE
+
+* Added limited support for non-SDXL models (no refiner, Control-LoRAs, Revision, inpainting, outpainting).
+
+### 2.0.78.2 MRE
+
+* Added support for FreeU.
+* Updated Comfy.
+
+### 2.0.78.1 MRE
+
+* Fixed reading paths from paths.json (broken in 2.0.73 MRE).
+* Fixed error related to playing audio notification.
+* Fixed error related to loading prompt with Enhance Image mode active.
+* Disabling Image-2-Image when Enhance Image is active.
+
+### 2.0.76 MRE
+
+* Added information about total execution time.
+* Enforced 'dpmpp_fooocus_2m_sde_inpaint_seamless' sampler for inpainting workflow.
+* Updated Comfy and patched Comfy functions.
+
+### 2.0.73 MRE
+
+* Renamed Input Image from vanilla to Enhance Image (to avoid confusion with Input tab)
+
+### 2.0.19 MRE
+
+* Added support for wildcards (ported from RuinedFooocus, adjusted to Fooocus V2).
+* Added support for ddpm sampler.
+* Restored saving information about real prompt in metadata and log file (adjusted to Fooocus V2).
+* Fixed links to log files not working with customized outputs path.
+* Disabled Fooocus Virtual Memory from vanilla (not compatible with current Comfy).
+* Updated Comfy.
+
+### 2.0.18 MRE
+
+* Added support for authentication in --share mode (via auth.json).
+* Added Image-2-Image Scale slider.
+* Displaying Revision and Control-LoRAs controls only when needed.
+
+### 2.0.14 MRE
+
+* Added support for loading models from subfolders (ported from RuinedFooocus).
+* Updated Comfy.
+
 ### 2.0.12 MRE
 
 * Added support for higher resolutions in Image-2-Image mode (can be used for upscaling).
+
+### 2.0.3 MRE
+
+* Updated Comfy (CLIP Vision optimizations).
 
 ### 2.0.0 MRE
 

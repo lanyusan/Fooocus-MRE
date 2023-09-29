@@ -1,3 +1,23 @@
+(2023 sep 21) The feature updating of Fooocus will be paused for about two or three weeks because we have some events and travelling - we will come back in early or mid October. 
+
+### 2.0.72
+
+* Allow users to choose path of models.
+
+### 2.0.65
+
+* Inpaint model released.
+
+### 2.0.50
+
+* Variation/Upscale (Midjourney Toolbar) implemented.
+
+### 2.0.16
+
+* Virtual memory system implemented. Now Colab can run both base model and refiner model with 7.8GB RAM + 5.3GB VRAM, and it never crashes.
+* If you are lucky enough to read this line, keep in mind that ComfyUI cannot do this. This is very reasonable that Fooocus is more optimized because it only need to handle a fixed pipeline, but ComfyUI need to consider arbitrary pipelines. 
+* But if we just consider the optimization of this fixed workload, after 2.0.16, Fooocus has become the most optimized SDXL app, outperforming ComfyUI.
+
 ### 2.0.0
 
 * V2 released.
