@@ -67,6 +67,7 @@ def worker():
     @torch.no_grad()
     @torch.inference_mode()
     def handler(task):
+        print(task)
         prompt, negative_prompt, style_selections, performance, resolution, image_number, image_seed, \
         sharpness, sampler_name, scheduler, custom_steps, custom_switch, cfg, \
         base_model_name, refiner_model_name, base_clip_skip, refiner_clip_skip, \
@@ -292,7 +293,7 @@ def worker():
         extra_negative_prompts = negative_prompts[1:] if len(negative_prompts) > 1 else []
 
         try:
-            seed = int(image_seed) 
+            seed = int(image_seed)
         except Exception as e:
             seed = -1
         if not isinstance(seed, int) or seed < constants.MIN_SEED or seed > constants.MAX_SEED:
@@ -360,7 +361,7 @@ def worker():
                     negative_basic_workloads.append(n)
             else:
                 positive_basic_workloads.append(task_prompt)
-    
+
             negative_basic_workloads.append(negative_prompt)  # Always use independent workload for negative.
 
             positive_basic_workloads = positive_basic_workloads + extra_positive_prompts
@@ -508,7 +509,7 @@ def worker():
 
                 execution_time = time.perf_counter() - execution_start_time
                 print(f'Diffusion time: {execution_time:.2f} seconds')
-    
+
                 metadata = {
                     'prompt': raw_prompt, 'negative_prompt': raw_negative_prompt, 'styles': raw_style_selections,
                     'real_prompt': task['positive'], 'real_negative_prompt': task['negative'],
@@ -548,10 +549,10 @@ def worker():
                         'depth_start': depth_start, 'depth_stop': depth_stop, 'depth_strength': depth_strength, 'depth_model': depth_model, 'depth_input': input_image_filename
                     }
                 metadata |= { 'software': fooocus_version.full_version }
-    
+
                 metadata_string = json.dumps(metadata, ensure_ascii=False)
                 metadata_strings.append(metadata_string)
-    
+
                 for x in imgs:
                     d = [
                         ('Prompt', raw_prompt),

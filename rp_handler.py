@@ -20,7 +20,8 @@ import fooocus_version
 from modules.launch_util import is_installed, run, python, \
     run_pip, repo_dir, git_clone, requirements_met, script_path, dir_repos
 from modules.model_loader import load_file_from_url
-from modules.path import modelfile_path, lorafile_path, clip_vision_path, controlnet_path, vae_approx_path, fooocus_expansion_path
+from modules.path import modelfile_path, lorafile_path, clip_vision_path, controlnet_path, vae_approx_path, fooocus_expansion_path, upscale_models_path
+
 
 
 from PIL import Image
@@ -54,7 +55,6 @@ INPUT_SCHEMA = {
 REINSTALL_ALL = False
 
 
-# all have been downloaded locally before build
 def prepare_environment():
     torch_index_url = os.environ.get('TORCH_INDEX_URL', "https://download.pytorch.org/whl/cu118")
     torch_command = os.environ.get('TORCH_COMMAND',
@@ -64,13 +64,13 @@ def prepare_environment():
     xformers_package = os.environ.get('XFORMERS_PACKAGE', 'xformers==0.0.21')
 
     comfy_repo = os.environ.get('COMFY_REPO', "https://github.com/comfyanonymous/ComfyUI")
-    comfy_commit_hash = os.environ.get('COMFY_COMMIT_HASH', "fb3b7282034a37dbed377055f843c9a9302fdd8c")
+    comfy_commit_hash = os.environ.get('COMFY_COMMIT_HASH', "2381d36e6db8e8150e42ff2ede628db5b00ae26f")
 
     print(f"Python {sys.version}")
     print(f"Fooocus version: {fooocus_version.version}")
 
     comfyui_name = 'ComfyUI-from-StabilityAI-Official'
-    # git_clone(comfy_repo, repo_dir(comfyui_name), "Inference Engine", comfy_commit_hash)
+    git_clone(comfy_repo, repo_dir(comfyui_name), "Inference Engine", comfy_commit_hash)
     sys.path.append(os.path.join(script_path, dir_repos, comfyui_name))
 
     if REINSTALL_ALL or not is_installed("torch") or not is_installed("torchvision"):
@@ -124,9 +124,18 @@ controlnet_filenames = [
 ]
 
 vae_approx_filenames = [
-    ('taesdxl_decoder.pth',
-     'https://huggingface.co/lllyasviel/misc/resolve/main/taesdxl_decoder.pth')
+    ('xlvaeapp.pth',
+     'https://huggingface.co/lllyasviel/misc/resolve/main/xlvaeapp.pth'),
+    ('taesd_decoder.pth',
+     'https://github.com/madebyollin/taesd/raw/main/taesd_decoder.pth')
 ]
+
+
+upscaler_filenames = [
+    ('fooocus_upscaler_s409985e5.bin',
+     'https://huggingface.co/lllyasviel/misc/resolve/main/fooocus_upscaler_s409985e5.bin')
+]
+
 
 def download_models():
     for file_name, url in model_filenames:
@@ -139,6 +148,8 @@ def download_models():
         load_file_from_url(url=url, model_dir=controlnet_path, file_name=file_name)
     for file_name, url in vae_approx_filenames:
         load_file_from_url(url=url, model_dir=vae_approx_path, file_name=file_name)
+    for file_name, url in upscaler_filenames:
+        load_file_from_url(url=url, model_dir=upscale_models_path, file_name=file_name)
 
     load_file_from_url(
         url='https://huggingface.co/lllyasviel/misc/resolve/main/fooocus_expansion.bin',
@@ -147,7 +158,6 @@ def download_models():
     )
 
     return
-
 
 def clear_comfy_args():
     argv = sys.argv
@@ -190,17 +200,7 @@ def generate_image(job):
 
     base_model_name = validated_input['validated_input'].get('base_model_name')
 
-
-    task = (prompt, '', [], 'Speed', "1024×1024", 1, 'None',
-        2, 'dpmpp_2m_sde_gpu', 'karras', 24, 0.75, 7,
-        base_model_name, 'sd_xl_refiner_1.0_0.9vae.safetensors', -2, -2,
-        'None', 0.5,'None', 0.5,'None', 0.5,'None', 0.5,'None', 0.5, False, False,
-        False, 0.06, 0.8,
-        False, 1, 1, 1, 1,
-        1, 1, False, 'png',
-        False, 0.2, 0.8, 0, 0.4, 0.5, 'control-lora-canny-rank128.safetensors',
-        False, 0, 0.4, 0.5, 'control-lora-depth-rank128.safetensors', True,
-        [], [], False)
+    task = [prompt, '', ['Default (Slightly Cinematic)'], 'Speed', '1152×896 (9:7)', 2, '466835054923474620', 2, 'dpmpp_2m_sde_gpu', 'karras', 24, 0.75, 7, base_model_name, 'sd_xl_refiner_1.0_0.9vae.safetensors', -2, -2, 'sd_xl_offset_example-lora_1.0.safetensors', 0.5, 'None', 0.5, 'None', 0.5, 'None', 0.5, 'None', 0.5, False, False, False, 0.06, 0.94, 1, False, 1, 1, 1, 1, 1, 1, False, 'png', False, 0.2, 0.8, 0, 0.4, 0.8, 'control-lora-canny-rank128.safetensors', False, 0, 0.4, 0.8, 'control-lora-depth-rank128.safetensors', True, False, 1.01, 1.02, 0.99, 0.95, False, 'uov', 'Disabled', None, [], None, [], [], False]
 
 
     worker.buffer.append(list(task))
@@ -224,8 +224,6 @@ def generate_image(job):
 
     print(f"Generate meta : {metadata}")
 
-    if len(result) == 0:
-        raise ValueError('Failed to generate image')
 
     return metadata
 
